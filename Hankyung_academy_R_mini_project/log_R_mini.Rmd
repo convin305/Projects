@@ -1,0 +1,329 @@
+---
+title: "R_mini_project"
+author: 'R Gae MI'
+date: '2021 5 17 '
+output: html_document
+---
+
+### 데이터 수집에 활용한 사이트 목록
+* e-나라지표 https://www.index.go.kr/
+* 한국 부동산원 http://www.reb.or.kr/kab/home/main/main.jsp
+* 국가 통계 포털 https://kosis.kr/index/index.do
+
+### 라이브러리 로드
+```{r}
+library(readxl)
+library(corrplot)
+library(car)
+library(MASS)
+library(lm.beta)
+```
+
+### 데이터 인풋
+```{r}
+data0 <-read_excel("C:/ken/r_pr_data.xlsx")
+```
+
+### 변수 설명
+#### 데이터 기간(2017.10 ~ 2021.02, 총 41개월)  
+* stock : 개인 주식 투자 금액 지수 (2017.11기준)  
+* house : 전국 아파트 실거래가 지수 (2017.11기준)  
+* y_job : 청년 실업률  
+* job : 전체 실업률  
+* moneyrate : 기준 금리  
+* coin : 가상화폐 투자 공포 탐욕 지수  
+* foreigner : 주식시장 내 외국인 보유비율
+* customerprice : 소비자 물가 지수 (2015년 기준)  
+
+### 데이터 구조 확인
+```{r}
+str(data0)
+```
+
+### 기초통계량 확인
+```{r}
+summary(data0)
+```
+
+### 변수들 단순 시각화
+```{r}
+
+```
+
+
+### house만을 이용한 단순선형 회귀분석
+**편의를 위해 회귀식들은 소수점 셋째자리에서 반올림 처리**  
+추정된 회귀식  
+
+#### $\hat{stock}=-837.82+9.09house$  
+
+house변수 하나만을 가지고 만든 회귀식의 경우, 수정된 $R^2$값이 0.787이고, $p-value$가 매우 작아 유의한 검정으로 볼 수 있다.
+```{r}
+result0 <- lm(stock~house, data=data0)
+summary(result0)
+```
+____________________________________________________  
+
+### 1차 다중회귀분석 변수 선택
+설명력을 더 높이기 위해서 house이외에 y_job, job, moneyrate 변수를 추가로 사용했다. 
+```{r}
+data1 <- data0[c('stock','house','y_job','job','moneyrate')]
+head(data1)
+```
+
+### 변수간 상관관계 파악  
+y_job과 job중에서 상관계수가 더 낮은 y_job을 제거하기로 결정했다.  
+또한 stock과 나머지 변수들간의 상관계수가 0.3이상이며, 어느정도 선형성을 가지고 있는 것을 확인할 수 있다. 
+```{r}
+cor(data1)
+pairs(data1)
+corrplot::corrplot.mixed(cor(data1),upper='ellipse')
+```
+
+### 다중 회귀분석
+추정된 회귀식  
+
+#### $\hat{stock} = -290.32+4.36house+12.51job-80.13moneyrate$  
+
+이 회귀식의 설명력인 수정된 $R^2$값은0.847이며,이는 house변수 하나만을 사용했을 때 보다 증가한 값이다. 
+$p-value$가 0에 가까워 이 회귀 모델이 유의함을 알 수 있다.  
+하지만 각 독립변수의 $p-value$를 살펴보았을 때, job이 0.15로 0.05보다 크기 때문에 회귀계수의 유의성이 의심된다. 
+```{r}
+result1<-lm(stock~house+job+moneyrate,data=data1)
+summary(result1)
+```
+
+### 다중공선성 확인
+10을 넘는 변수가 따로 보이지 않으므로 양호하다고 판단한다.
+```{r}
+vif(result1)
+```
+
+### 회귀분석의 가정
+* 선형성 (변수 간 상관관계에서 확인)
+* 독립성
+* 정규성
+* 등분산성
+
+### 독립성 확인
+$H_0$ : 잔차들이 서로 독립적이다.  
+$H_1$ : 잔차들이 서로 독립적이지 않다.  
+D-W Statistic 값이 1.46이고, p-value가 0.05보다 작아 잔차들이 서로 독립적이지 않다. 그렇기 때문에 나머지 부분을 설명할 새로운 변수의 추가가 필요하다.  
+```{r}
+durbinWatsonTest(result1)
+```
+__________________________________________________________________
+
+### 새로운 변수 투입
+가상화폐 지수, 주식시장에서의 외국인 지분율, 소비자 물가지수  
+```{r}
+data2 <- data0[c('stock','house','job','moneyrate','coin','foreigner','customerprice')]
+head(data2)
+```
+
+### 변수간 상관관계 파악  
+특이점 있는 변수는 없는 것으로 판단됨.  
+stock과 다른 변수들의 상관관계를 보았을 때, 상관계수가 0.3이상이며 적당한 선형성이 존재하고 있음을 알 수 있다. 
+```{r}
+cor(data2)
+pairs(data2)
+corrplot::corrplot.mixed(cor(data2),upper='ellipse')
+```
+
+### 회귀분석  
+
+#### $\hat{stock}=1733.93+5.28house+11.07job-61.84moneyrate+0.3coin-13.1foreigner-16.49customerprice$  
+이 회귀식의 수정된 $R^2$는 0.8794이며, 마찬가지로 result1보다 증가한 수치임을 알 수 있다.  
+$p-value$값은 매우 낮아 이 회귀 모형은 통계적으로 유의하다고 할 수 있다.  
+각각의 변수들을 살펴보면, 다른 변수들의 $p-value$ 0.05이하로 유의하다고 볼 수 있으나 coin과 job은 0.05이상이므로 회귀계수가 0은 아닌지 의심해 볼 필요가 있다고 판단된다.  
+```{r}
+result2 <- lm(stock~house+job+moneyrate+coin+foreigner+customerprice,data=data2)
+summary(result2)
+```
+
+### stepAIC
+MASS라이브러리의 stepAIC를 이용해서 6개의 변수 중 어떤 것을 선택해야 최종적으로 좋은(유의미한)모델을 만들 수 있나 판단을 해본다. 
+```{r}
+result3 <- MASS::stepAIC(result2)
+```
+
+### stepAIC결과
+stepAIC결과 coin변수를 제외한 모델이 선정됨.  
+추정된 회귀식  
+
+#### $\hat{stock}=1861.61+5.84house+11.05job-60.96moneyrate-12.13foreigner-18.43customerprice$  
+
+수정된 $R^2$값은 0.8801이고, result2보다 증가하였으며 p값이 매우 작은 것을 확인할 수 있다. 
+```{r}
+summary(result3)
+```
+
+### 다중공선성 확인
+10을 넘는 변수가 따로 보이지 않으므로 양호하다고 판단한다.
+```{r}
+car::vif(result3)
+```
+
+### 독립성 확인
+$H_0$ : 잔차들이 서로 독립적이다.  
+$H_1$ : 잔차들이 서로 독립적이지 않다.  
+D-W statistic이 1.87로 2에 가깝고, $p-value$가 0.2로 0.05보다 크므로 잔차들은 서로 독립적이라고 할 수 있다.
+```{r}
+durbinWatsonTest(result3)
+```
+
+### 정규성 확인
+$H_0$ : 잔차들이 정규성을 띄고있다.  
+$H_1$ : 잔차들이 정규성을 띄고 있지않다.  
+$p-valule$의 값이 0.1127로 0.05보다 크므로 잔차들은 정규성을 띄고 있다.  
+NormalQQ 그래프의 경우를 보아도 정규성을 크게 벗어나지는 않는 것으로 보인다. 
+```{r}
+shapiro.test(resid(result3))
+```
+```{r}
+plot(result3,2)
+```
+
+### 등분산성 확인
+잔차들이 커지는 경향을 보이고 있어 추가적인 분석이 필요하다고 판단된다. 
+```{r}
+plot(result3,1)
+```
+
+__________________________  
+### log변환
+
+분산을 안정화 시키기 위해서 종속변수인 stock에 log처리를 하고, 전체 변수 모델을 대상으로 stepAIC진행. 
+그 결과 coin변수가 제외됨.
+```{r}
+log_lm <- lm(log(stock)~house+moneyrate+coin + job +foreigner+customerprice,data=data2)
+result4 <- stepAIC(log_lm)
+```
+
+### 회귀분석
+추정된 회귀식  
+
+#### $\hat{log(stock)} = 21.12 +0.03 house -0.7 moneyrate + 0.12job - 0.09foreigner -0.15 customerprice$  
+
+수정된 $R^2$값은 0.8634, $p-value$또한 낮다.  
+```{r}
+summary(result4)
+```
+
+### 독립성 확인
+$H_0$ : 잔차들이 서로 독립적이다.  
+$H_1$ : 잔차들이 서로 독립적이지 않다.  
+D-W statistic이 1.65로 2에 가깝고, $p-value$가 0.05이상이므로 잔차들은 서로 독립적이다
+```{r}
+durbinWatsonTest(result4)
+```
+
+### 정규성 확인
+$H_0$ : 잔차들이 정규성을 띄고있다.  
+$H_1$ : 잔차들이 정규성을 띄고 있지않다.  
+$p-valule$의 값이 0.8989로 0.05보다 크므로 잔차들은 정규성을 띄고 있다.  
+하지만 1,32,4번 관측값을 제거하면 더 나은 모델을 만들 수 있을것으로 생각된다.  
+```{r}
+shapiro.test(resid(result4))
+plot(result4,2)
+```
+
+### 등분산성
+등분산성이 log를 취하지 않은 다른 모델과 비교했을 때, 비교적 안정되었으나 여전히 경향성을 보이고 있으며,  
+1,32,4번 관측치가 여전히 의심스럽다.
+```{r}
+plot(result4,1)
+```
+
+### 쿡의 거리
+정말 제거해야하는 관측치들인지 판단하기 위해서 쿡의 거리를 비교해본다.  
+그 결과 1번이 영향력을 제일 크게 발휘하므로 제거하기로 결정하였다.  
+```{r}
+plot(result4,4)
+```
+
+### 이상치 제거
+1번 관측치를 제거하고, data5변수를 새롭게 생성 후 stepAIC를 이용하여 회귀 모델의 변수 선택을 진행하였다.  
+그 결과 job, house, customerprice, moneyrate 4가지 변수를 이용한 모델이 최적 모델로 선택이 되었다.
+```{r}
+data5 <- data2[-1,]
+log_lm <- lm(log(stock)~house+moneyrate+coin+job+foreigner+customerprice,data=data5)
+result5 <- stepAIC(log_lm)
+```
+
+### 회귀분석 
+추정된 회귀식  
+
+#### $\hat{log(stock)} = 22.27 + 0.03house -0.83moneyrate + 0.12job -0.19customerprice$  
+
+수정된 $R^2$의 값이 0.8865로 이전 모델보다 증가하였으며, $p-value$의 값도 매우 작아 신뢰할 수 있는 모델로 판단된다.  
+동시에 각 회귀계수들의 p값도 0.05보다 작아 유의미한 회귀계수로 판단할 수 있다.  
+```{r}
+summary(result5)
+```
+
+### 다중공선성 
+모델에 사용된 변수들의 vif값이 10 이하이므로 양호하다고 판단된다. 
+```{r}
+car::vif(result5)
+```
+
+### 독립성
+$H_0$ : 잔차들이 서로 독립적이다.  
+$H_1$ : 잔차들이 서로 독립적이지 않다.  
+D-W statistic이 1.71로 2에 가깝고, $p-value$가 0.05보다 크므로 잔차들은 서로 독립적이라고 할 수 있다.
+```{r}
+durbinWatsonTest(result5)
+```
+
+### 정규성 확인
+$H_0$ : 잔차들이 정규성을 띄고있다.  
+$H_1$ : 잔차들이 정규성을 띄고 있지않다.  
+$p-valule$의 값이 0.1188로 0.05보다 크므로 잔차들은 정규성을 띄고 있다. 
+```{r}
+shapiro.test(resid(result5))
+```
+Normal QQ의 경우에는 이전과 큰 변화는 없다. 
+```{r}
+plot(result5,2)
+```
+
+### 등분산성
+등분산성이 log를 취하지 않거나 이상치를 제거하지 않은 다른 모델과 비교했을 때, 분산이 매우 안정되어 등분산성을 띄는 것을 볼 수 있다.  
+```{r}
+plot(result5,1)
+```
+
+## 결론
+
+### 표준화 회귀계수
+독립변수들이 종속변수에 미치는 영향을 정확하게 파악하기 위해 표준화 회귀계수를 구했고, 그 결과는 다음과 같다.  
+moneyrate,house,customerprice,job순서로 stock에 영향을 크게 미친다.
+```{r}
+lm.beta::lm.beta(result5)
+```
+
+### 예측
+예측을 위해 result5에 사용된 변수 4개의 2021.03 ~ 2021.05 기간을 가진 new_data라는 데이터 프레임 생성.  
+해당 기간의 데이터가 공개되어 있으면 그 자료를 사용하고 그렇지 않은 경우 엑셀의 예측시트 생성 기능을 통해 추세에 따른 예측 값을 만들어서 사용하였다. 
+```{r}
+house = c(127.3211,130.1539,132.9868)
+moneyrate = c(0.5,0.5,0.5)
+job = c(4.3,4.0,4.2)
+customerprice = c(107.16,107.39,106.5348)
+
+new_data = data.frame(house,moneyrate,job,customerprice)
+head(new_data)
+```
+
+result5는 로그를 취한 상태이기에 원래의 결과값을 보기 위해서 exp를 적용한다.  
+그 결과 2021년 3월의 예측 값은 240.28, 4월은 241.15, 5월은 316.17 이 나온것을 볼 수 있다.  
+```{r}
+yearmonth = c("2021년 3월", "2021년 4월", "2021년 5월")
+expect = exp(predict(result5,newdata = new_data,interval = "confidence"))
+
+total = data.frame(yearmonth,expect)
+total
+```
+2021년 03월의 주식시장 개인 거래실적이 분석 과정 중 공개되어 지수로 변환한 결과는 **221** 로,  
+예측값의 95% 신뢰수준(190.0841,303.7256) 사이에 들어있으므로 이 모델을 가지고 진행한 예측이 유의하다고 말할 수 있다. 
